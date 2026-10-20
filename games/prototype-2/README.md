@@ -162,6 +162,33 @@ the directory entry, per the hub's rules):
   `scripts/datainit.lua`. It runs the vanilla chunk, then our rules, then returns the
   original value untouched, and it is written so that a co-op bug can never stop the
   game from starting.
+- **The native half** (32-bit C++, because the game is a 32-bit binary):
+  - **`include/coop/protocol.h`** — the wire format. A 16-byte header (version, type,
+    flags, sequence, length, CRC-32) and a payload, with every read bounds checked and
+    a failed read latching an error flag, so a malformed message from the network can
+    neither crash the game nor be half interpreted.
+  - **`include/coop/detour.h`** — an x86 inline detour. This is needed because the
+    executable does not import the engine DLL statically: it loads it at runtime and
+    resolves six exports by name, and `EngineService` (the engine's per-frame call) is
+    resolved *before* any ASI plugin is loaded, because the ASI loader is reached
+    through `binkw32.dll`, which the engine loads later when it sets up video. Patching
+    the code is the only approach that works regardless of when the address was
+    resolved. The detour is conservative: it decodes the instructions it is about to
+    move and refuses to install rather than risk corrupting the target.
+  - **`include/coop/steam_transport.h`** — Steam P2P. The game ships the legacy
+    `steam_api.dll` with no flat exports, so calls go through a COM vtable, and the
+    interface changed shape across Steamworks versions. Only the first eight slots of
+    `ISteamNetworking` are declared, the P2P packet API, which has had the same order
+    and signatures since SteamNetworking001. Steam's transport does NAT traversal and
+    falls back to Valve's relay, so no port forwarding is needed.
+  - **`src/plugin.cpp`** — the ASI plugin: waits for the engine DLL, detaches
+    `EngineService`, opens the transport and runs the per-frame loop.
+- **`third_party/coop_ownership`** — the actor-ownership library from the hub, vendored
+  verbatim with its MIT licence. Prototype 2's open world is streamed by the engine, so
+  something has to decide which machine owns which actor and something has to reject
+  updates from a machine that is no longer the owner. Sharing the library means the
+  ownership rules that Fallout: New Vegas co-op and Prototype 2 co-op use are the same
+  rules.
 
 ### How the mod gets into the game
 
@@ -201,6 +228,20 @@ installer should check for it.
   synthetic round-trips, 2048-byte payload alignment, rejection of non-Cement input, and
   a full extract → repack → re-extract round trip against the **real** `scripts.rcf`
   from the installed game: 9 entries, all names resolve, all payloads byte-identical.
+- **Native code: automated, as 32-bit binaries.** `native/build.bat` builds for i686,
+  checks that the output really is 32-bit, and runs three suites:
+  - protocol: **15 tests, 352 checks** — round trips, rejection of short buffers, wrong
+    versions, wrong lengths and bad CRCs, a reader that never reads past the end, and
+    two fuzz loops (garbage in, and single-bit corruption of a valid message);
+  - detour: **4 tests, 23 checks** — the instruction decoder against hand-computed
+    lengths, a detoured function still reaching the original through the trampoline,
+    and the case that breaks naive trampolines (a relative branch inside the moved
+    block);
+  - ownership: **30 tests, 134 checks**, vendored from the hub unchanged.
+  The tests found three real bugs while being written: an x86 decoder that did not
+  know `push ebp`, a ModR/M length calculation that was wrong for several encodings,
+  and a test whose function pointer the compiler folded away so the patched code was
+  never called. All three are fixed.
 - **Installer: checked by hand** against the installed game. `--find` locates the
   install, the identity check passes against the known build (both SHA-256s match), and
   the extraction returns the 565,191-byte vanilla `scripts/datainit.lua` with the

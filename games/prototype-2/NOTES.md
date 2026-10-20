@@ -424,9 +424,36 @@ Lua 5.1 decompiler and its source is BSD-licensed and public
 it needs a JDK, and it also needs the chunk's custom VM to be stock Lua 5.1. A Python
 Lua 5.1 chunk parser is the cheaper route and is the next tool to write.
 
+### 2.4 Нативная половина (C++, 32-бит)
+
+**[OBS]** Собранные и протестированные модули:
+
+| Файл | Назначение |
+|---|---|
+| `native/include/coop/protocol.h`, `src/protocol.cpp` | формат сообщений: заголовок 16 байт (версия, тип, флаги, номер, длина, CRC-32) и полезная нагрузка. Каждое чтение проверяет границы, ошибка «залипает», поэтому битое сообщение из сети не может уронить игру и не может быть прочитано наполовину. |
+| `native/include/coop/detour.h`, `src/detour.cpp` | x86-инлайн-детеур: нужен потому, что exe грузит движок динамически и разрешает `EngineService` **до** загрузки любого ASI-плагина. Переносимые инструкции декодируются; при незнакомой кодировке установка отклоняется. Ветвление внутрь переносимого блока сохраняет смещение, ветвление наружу сдвигается на дельту. |
+| `native/include/coop/steam_transport.h`, `src/steam_transport.cpp` | Steam P2P поверх legacy `steam_api.dll`: только первые 8 слотов vtable `ISteamNetworking` (P2P-пакеты), одинаковые начиная с SteamNetworking001. NAT-траверс и relay Valve — порты пробрасывать не нужно. |
+| `native/src/plugin.cpp` | ASI-плагин: ждёт `prototype2engine.dll`, ставит детеур на `EngineService`, открывает транспорт, крутит покадровый цикл, пишет `coop_plugin.log`. |
+| `native/third_party/coop_ownership` | библиотека владения акторами из хаба, перенесена дословно вместе с MIT-лицензией. |
+
+**[OBS] Тесты (все собираются как i686, потому что 64-битная сборка не поймала бы
+ошибки соглашения о вызовах):**
+- протокол: 15 тестов, 352 проверки;
+- детеур: 4 теста, 23 проверки;
+- владение: 30 тестов, 134 проверки.
+
+**[OBS]** Тесты нашли три настоящих бага, пока их писали: декодер x86 не знал `push ebp`
+(0x55); расчёт длины ModR/M был неверен для нескольких кодировок; и в одном тесте
+указатель на функцию компилятор свёртывал, так что пропатченный код вообще не
+выполнялся. Все три исправлены.
+
+**[UNK]** Ни один модуль нативной половины ещё не запускался внутри игры. Не найден
+Lua-состояние движка, поэтому правила из `scripts/coop_init.lua` из плагина ещё не
+вызываются, и аватара игрока ещё нет.
+
 ---
 
-## 3. Design (see also the game's own `DESIGN.md`)
+## 3. Design (см. также `DESIGN.md` в репозитории мода)
 
 ### 3.1 Architecture
 
@@ -567,3 +594,10 @@ Per the hub's rules, a human playtest is not a test plan. The plan:
   **Titanium 2.0** (PCGamingWiki) and added the `Level=`/`LanHost=` command line
   arguments, the save location, the Prototype2Fix movement-drift warning, the ASI loader
   plumbing, and the second community hub (The Hive).
+- 2026-10-21 — Owner authenticated GitHub CLI. Draft pull request
+  cranebeaker/coop-anything#89 opened from branch `game/prototype-2`; the mod's own
+  repository published as **https://github.com/Peach911/prototype2-coop**.
+- 2026-10-21 — Owner approved installing MSYS2 with the i686 mingw-w64 toolchain.
+  Built the native half: wire protocol, x86 inline detour for the engine's
+  `EngineService`, and the Steam P2P transport. 49 tests / 509 checks pass as 32-bit
+  binaries. Vendored the hub's actor-ownership library.

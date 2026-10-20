@@ -112,3 +112,6 @@ can find you.
 - `research/`: background notes the playbook was built from.
 - `tools/`: the directory builder, the MCP server, and the sync test tools
   ([tools/README.md](tools/README.md)); `python -I tools/test_all.py` runs every tool's tests.
+
+# Output Language
+- Always respond in Russian.
