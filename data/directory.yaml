@@ -7043,3 +7043,53 @@
   - https://steamcommunity.com/app/1458140/discussions/0/604153001708376779
   checked: '2026-10-20'
   made_with_coop_anything: true
+- game: Prototype 2
+  year: 2012
+  engine: Titanium 2.0 (Radical)
+  project: (none found)
+  url: ''
+  other_urls:
+  - https://www.reddit.com/r/PrototypeGame/comments/1w1eqpi/possible_prototype_2_multiplayer_mod/
+  kind: gap
+  status: none
+  coop_scope: {}
+  players: unknown
+  networking: unknown
+  open_source: unknown
+  last_activity: unknown
+  qa: none
+  notes: No released co-op mod exists for Prototype 2. Two abandoned prototypes. u/usbdrivetaken's
+    "Possible prototype 2 multiplayer mod", posted 2026-08-29, last update 2026-09-04, with host
+    lobby, client join and in-engine chat reportedly working, up to 20 players planned, and no
+    build, code or invite ever published (testers were asked for by email or Discord). And
+    MysteriousPowers' Cheat Engine plus Parsec proof of concept from 2021, never released, with
+    the project files Patreon gated and not public. The game is unusually open for a from-zero
+    attempt. It ships a Lua 5.1 script layer with about 1544 exposed engine functions (go_, ai_,
+    mm_, mms_, db_, fes_, enc_, time_ and tod_ prefixes), its data sits in .rcf Cement archives
+    whose format is published (BSD-3-clause Gibbed.Prototype), the engine loads scripts from
+    hard-coded paths and the cementfiles.p3d archive manifest lets a later archive override an
+    earlier one, steam_api.dll exports SteamNetworking005 so a plugin can use Steam's P2P relay,
+    and the engine has Level= and LanHost= command line arguments. The binding constraint is
+    simulation scope, not networking - pedestrians, props, vehicles, time dilation, screen shake
+    and enemy targeting all have to be decided by one machine. From-zero research, tooling and
+    design in games/prototype-2.
+  sources:
+  - https://www.reddit.com/r/PrototypeGame/comments/1w1eqpi/possible_prototype_2_multiplayer_mod/
+  - https://www.nexusmods.com/games/prototype2
+  - https://www.pcgamingwiki.com/wiki/Prototype_2
+  - https://github.com/gibbed/Gibbed.Prototype
+  - https://github.com/ThunderGemios10/Prototype2-DebugMenu
+  - https://www.nexusmods.com/prototype2/mods/42
+  - https://www.youtube.com/watch?v=n85kmU7LqEs
+  - https://steamdb.info/app/115320/
+  checked: '2026-10-21'
+  searched:
+  - 'WebSearch: "Prototype 2" co-op mod multiplayer 2025, "prototype 2 multiplayer mod github", "prototype 2 engine
+    Lua scripting", "MysteriousPowers" prototype'
+  - 'Nexus Mods game page, keyword multiplayer, coop and co-op, 0 results, 91 mods all single-player'
+  - 'GameBanana PT2 hub (28 mods), ModDB, Steam Workshop (no support for this app), 30 Steam guides'
+  - 'GitHub user and repository search for prototype 2 multiplayer, anvil coop mod, gibbed prototype and
+    MysteriousPowers, no repositories found'
+  - 'r/CoOpGaming mega-list (1286 entries) and unmoddable.com, Prototype absent'
+  - 'Reddit r/PrototypeGame read in full through the browser, plain fetches are blocked with 451'
+  - 'PCGamingWiki Prototype 2 and Engine:Titanium, archived snapshot 2026-09-20'

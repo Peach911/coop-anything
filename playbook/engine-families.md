@@ -53,3 +53,7 @@ Stranding), id Tech 5 (Wolfenstein The New Order), Frostbite (Dead Space remake)
 Northlight (Alan Wake 2, Control), Visceral (Dead Space), Glacier (Hitman Blood Money),
 and console-exclusive engines ported to PC (God of War, Ghost of Tsushima, The Last of Us).
 These need a team; start with research and a design doc, and claim the game with an issue.
+
+| Engine family | Games | What carries over |
+|---|---|---|
+| **Titanium 2.0** (Radical) | Prototype 2 (2012) — no co-op project, gap entry; the first Prototype (2009) is a second gap. Titanium is the engine later reworked into **AnvilNext** for Middle-earth: Shadow of Mordor, so nothing carries over from there either. | Closed 32-bit binary, but unusually open: gameplay runs in a shipped **Lua 5.1 script layer** (about 1,544 exposed engine functions), assets sit in `.rcf` "Cement" archives whose format is published (BSD-3-clause [Gibbed.Prototype](https://github.com/gibbed/Gibbed.Prototype)), the engine loads scripts from **hard-coded paths**, and `cementfiles.p3d` in the game root is an **archive manifest** where a later archive overrides an earlier one by name hash — that is how a mod replaces a script without repacking 8 GB of assets. `steam_api.dll` exports `SteamNetworking005`, so a plugin can use Steam's P2P relay. There is no netcode; the engine has `Level=` and `LanHost=` command line arguments. See [games/prototype-2](../games/prototype-2/README.md). |
