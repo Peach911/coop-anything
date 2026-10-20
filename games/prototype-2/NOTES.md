@@ -576,6 +576,66 @@ Per the hub's rules, a human playtest is not a test plan. The plan:
 9. **[UNK] Whether the loose-file override applies to `scripts\` at all** — it has to, for
    the debug menu to work, but that is inference from gibbed's setup, not an observation.
 
+### 2.5 Находки, полученные в самой игре
+
+**[OBS] Сквозная цепочка скриптов работает.** Движок грузит наш `scripts/datainit.lua`
+как plain text. Доказательство — контролируемый эксперимент: с намеренно сломанной
+копией игра зависает на экране загрузки (рабочая память 288 МБ, надпись «ЗАГРУЗКА...»),
+с рабочей копией доходит до главного меню (670 МБ), и данные миссий целы. Контрольный
+запуск без мода ведёт себя так же, как «хороший» запуск. Игра запускается только через
+Steam: прямой запуск exe сразу завершается с кодом 53.
+
+**[OBS] Важно: игра при старте сама запускает установку DirectX** (`Redist\DirectX\dxsetup.exe
+/silent`), из-за чего в журнале событий появляется системное восстановление. Ранний
+«выход» игры в первых прогонах был этим, а не модом.
+
+**[OBS] Через Steam игра стартует за 24-60 с**, в зависимости от кэша.
+
+**[OBS] Встроенный сетевой стек движка** — это теперь главная зацепка для транспорта:
+- `prototype2engine.dll` импортирует **WS2_32.dll** и IPHLPAPI.DLL;
+- внутри есть клиент **Demonware** (маппинг портов NAT): строки про
+  `DemonwarePortMapping`, `NewExternalPort`, `NewInternalPort`, `NewRemoteHost`,
+  `GetSpecificPortMappingEntry`, `Mapping collision found. New port Selected`,
+  `onConnectFailed callback for connection`, `$LobbyDisconnect`,
+  `simulation. This will affect connectivity between clients`;
+- есть аргумент командной строки **`LanHost=[value]`** — латентная точка входа в
+  хост-режим, оставшаяся от отменённого мультиплеера первой Prototype;
+- в Lua есть слой **`ols_*`** (online services), который штатные скрипты не используют
+  вообще: `ols_IsConnectedToHost`, `ols_ShowOnlineConnect`, `ols_ShowLogin`,
+  `ols_SaveProfile`, `ols_LoadProfile`, `ols_RequestStartGame`, `ols_CancelStartGame`,
+  `ols_ShowRedeemToken`, `ols_CancelAllSyncRequests`. Именно он не попал в список из
+  1544 имён, потому что скрипты его не зовут.
+
+**[OBS] Steam P2P через игровую `steam_api.dll` невозможен** — измерено, а не
+предположено:
+- игра везёт **legacy** `steam_api.dll` (124 296 байт): плоских экспортов
+  `SteamAPI_ISteamNetworking_*` нет, всё идёт через COM-vtable за аксессорами;
+- аксессоры указатели **возвращают** (измерено: `0x04010BE0` и `0x03FF01C0`), но эти
+  интерфейсы **нерабочие**: вызов любого метода приводит к `0xC0000005` на
+  неотображённый адрес, и даже `ISteamUser::GetSteamID()` ронял игру;
+- причина: legacy-API создаёт только те интерфейсы, которые запрашивает приложение, а
+  игра просит у Steam лишь user, friends, utils, apps и stats — интерфейс сети не
+  создаётся вовсе;
+- поэтому транспорт лежит за `COOP_USE_STEAM_TRANSPORT` и **выключен по умолчанию**:
+  включить его — значит уронить игру.
+
+**[OBS] Движок не грузит `.asi` сам.** Нужен **Ultimate ASI Loader**: он ставится как
+`binkw32.dll` (движок импортирует именно эту DLL), а игровая копия сохраняется как
+`binkw32Hooked.dll`. Установщик качает официальный релиз и проверяет SHA-256 и архива,
+и прокси-DLL.
+
+**[OBS] Вызов `EngineService` — точка для покадрового хука.** Движок экспортирует
+шесть функций, и exe разрешает их по имени уже после загрузки движка, то есть раньше
+любого ASI-плагина; значит единственный способ — патчить код. Пролог `EngineService`:
+`sub esp,8; call rel32; test al,al` — переносимые 8 байт, и относительный `call`
+внутри них требует правки смещения.
+
+**[OBS] Четыре настоящих бага нашли тесты:** декодер x86 не знал `push ebp`; расчёт
+длины ModR/M был неверен для нескольких кодировок; **знак правки относительного
+перехода был обратным** (движковый `call` улетал в мусор — ровно тот краш, что был в
+игре); и детеур писал свой прыжок, пока игра выполняла патченную функцию.
+
+
 ---
 
 ## Log

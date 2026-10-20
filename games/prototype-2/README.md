@@ -183,6 +183,44 @@ the directory entry, per the hub's rules):
     falls back to Valve's relay, so no port forwarding is needed.
   - **`src/plugin.cpp`** — the ASI plugin: waits for the engine DLL, detaches
     `EngineService`, opens the transport and runs the per-frame loop.
+- **The engine has its own networking stack**, and that is where the transport has to come
+  from:
+  - `prototype2engine.dll` imports **`WS2_32.dll`** (winsock) and `IPHLPAPI.DLL`;
+  - it contains a **Demonware** client — a NAT port mapping implementation with
+    `<NewPortMappingDescription>DemonwarePortMapping</NewPortMappingDescription>`,
+    `<NewExternalPort>`, `<NewInternalPort>`, `<NewRemoteHost>`,
+    `GetSpecificPortMappingEntry`, "Mapping collision found. New port Selected",
+    "onConnectFailed callback for connection", `$LobbyDisconnect`, "test 2 response from
+    primary port" and "simulation. This will affect connectivity between clients";
+  - the engine takes a **`LanHost=[value]`** command line argument, a **latent host entry
+    point**: multiplayer was planned for the first Prototype and cut, and this is the seam
+    it left;
+  - the Lua layer exposes an **`ols_*` online service layer** that the shipped scripts
+    never use: `ols_IsConnectedToHost`, `ols_IsOnlineConnectActive`,
+    `ols_ShowOnlineConnect`, `ols_ShowLogin`, `ols_SaveProfile`, `ols_LoadProfile`,
+    `ols_RequestStartGame`, `ols_CancelStartGame`, `ols_ShowRedeemToken`,
+    `ols_CancelAllSyncRequests`, `ols_GetProfileControllerSlotID`. That layer is not in
+    the 1,544 names the scripts use, because the scripts never call it.
+- **Steam P2P through the game's own `steam_api.dll` is not possible.** Measured in the
+  game, not assumed: the game ships the **legacy** `steam_api.dll`, which has no flat
+  `SteamAPI_ISteamNetworking_*` exports, so calls go through a COM vtable behind the
+  exported accessors. The accessors do return pointers, but the interface objects are not
+  usable — calling anything on them faults, and even `ISteamUser::GetSteamID()` took the
+  game down with `0xC0000005` at an unmapped address. The reason is that the legacy API
+  only creates the interfaces the application asks for, and this game only ever asks Steam
+  for **user, friends, utils, apps and stats**, so the networking interface is never
+  created. The transport code is kept, but it is off by default, because switching it on
+  takes the game down.
+- **The ASI loader is part of the install.** The game does not load `.asi` files itself,
+  so the **Ultimate ASI Loader** goes in as `binkw32.dll` (the game imports that DLL),
+  and the game's own copy is kept as `binkw32Hooked.dll`. The installer downloads it
+  from the official release and checks the SHA-256 of both the archive and the proxy
+  before it installs anything.
+- **The engine's per-frame call is `EngineService`**, one of six exports the executable
+  resolves by name at runtime. It does not import the engine DLL statically, so the
+  address is resolved before any plugin is loaded and the only way in is to patch the
+  code. The plugin does that now, and the game reaches its front end with the hook
+  installed.
 - **`third_party/coop_ownership`** — the actor-ownership library from the hub, vendored
   verbatim with its MIT licence. Prototype 2's open world is streamed by the engine, so
   something has to decide which machine owns which actor and something has to reject
@@ -222,33 +260,49 @@ installer should check for it.
 
 ## QA
 
-- **Archive tooling: automated.** `python tools/tests/test_cement.py` → **14 tests, all
+- **The script chain works, verified in the game.** The engine loads our plain-text
+  `scripts/datainit.lua`. The proof is a controlled experiment: with a deliberately
+  broken copy installed, the game hangs on its loading screen (stuck at 288 MB of
+  working set, showing the loading text), and with the good copy it reaches the front
+  end (670 MB) with the mission data intact. A control run without the mod behaves the
+  same as the good run, and the game launches only through Steam (a direct launch exits
+  immediately with code 53).
+- **Archive tooling: automated.** `python tools/tests/test_cement.py` -> **14 tests, all
   pass**. The suite covers the name hash against a known engine value
-  (`scripts\credits.txt` → `0x4EC82608`, taken from the shipped `scripts.rcf`),
+  (`scripts\credits.txt` -> `0x4EC82608`, taken from the shipped `scripts.rcf`),
   synthetic round-trips, 2048-byte payload alignment, rejection of non-Cement input, and
-  a full extract → repack → re-extract round trip against the **real** `scripts.rcf`
+  a full extract -> repack -> re-extract round trip against the **real** `scripts.rcf`
   from the installed game: 9 entries, all names resolve, all payloads byte-identical.
+- **The archive manifest: automated.** `python tools/tests/test_pure3d.py` -> **9 tests,
+  all pass**. The format of `cementfiles.p3d` was worked out from the shipped file and
+  from gibbed's `Prototype2-DebugMenu`, and a round trip through the reader and the
+  writer is byte identical for both the game's manifest and gibbed's.
 - **Native code: automated, as 32-bit binaries.** `native/build.bat` builds for i686,
-  checks that the output really is 32-bit, and runs three suites:
-  - protocol: **15 tests, 352 checks** — round trips, rejection of short buffers, wrong
+  checks that the output really is 32-bit and has no dependencies the game folder lacks,
+  and runs three suites:
+  - protocol: **15 tests, 352 checks** - round trips, rejection of short buffers, wrong
     versions, wrong lengths and bad CRCs, a reader that never reads past the end, and
     two fuzz loops (garbage in, and single-bit corruption of a valid message);
-  - detour: **4 tests, 23 checks** — the instruction decoder against hand-computed
-    lengths, a detoured function still reaching the original through the trampoline,
-    and the case that breaks naive trampolines (a relative branch inside the moved
-    block);
+  - detour: **4 tests, 24 checks** - the instruction decoder against hand-computed
+    lengths, a detoured function still reaching the original through the trampoline, and
+    the case that breaks naive trampolines (a relative call inside the moved block);
   - ownership: **30 tests, 134 checks**, vendored from the hub unchanged.
-  The tests found three real bugs while being written: an x86 decoder that did not
-  know `push ebp`, a ModR/M length calculation that was wrong for several encodings,
-  and a test whose function pointer the compiler folded away so the patched code was
-  never called. All three are fixed.
+  The tests found four real bugs while being written: an x86 decoder that did not know
+  `push ebp`; a ModR/M length calculation that was wrong for several encodings; a
+  relative branch fixup with the sign backwards, which sent the engine's own call into
+  garbage; and a detour that wrote its jump while the game was running the function it
+  was patching.
+- **The plugin runs in the game.** With the ASI loader installed and the plugin loaded,
+  the game reaches its front end, three clean runs in a row, and `coop_plugin.log` in
+  the game folder shows the plugin loading, finding `prototype2engine.dll`, hooking
+  `EngineService` and running.
 - **Installer: checked by hand** against the installed game. `--find` locates the
-  install, the identity check passes against the known build (both SHA-256s match), and
-  the extraction returns the 565,191-byte vanilla `scripts/datainit.lua` with the
-  expected Lua 5.1 header. The install itself has **not** been run against the owner's
-  copy.
-- **Co-op: nothing.** No two-player session has been attempted, and no code has been run
-  inside the game. The QA level for this game is therefore **none**.
+  install, the identity check passes against the known build (both SHA-256s match), the
+  extraction returns the 565,191-byte vanilla `scripts/datainit.lua` with the expected
+  Lua 5.1 header, and `--dry-run` prints the plan without writing anything.
+- **Co-op: nothing.** No two-player session has been attempted. The transport does not
+  exist yet, because the game's Steam library cannot provide one (see above). The QA
+  level for this game is therefore **none**.
 
 ## How to play
 
