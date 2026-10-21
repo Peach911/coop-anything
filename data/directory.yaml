@@ -7068,8 +7068,12 @@
     mm_, mms_, db_, fes_, enc_, time_ and tod_ prefixes), its data sits in .rcf Cement archives
     whose format is published (BSD-3-clause Gibbed.Prototype), the engine loads scripts from
     hard-coded paths and the cementfiles.p3d archive manifest lets a later archive override an
-    earlier one, steam_api.dll exports SteamNetworking005 so a plugin can use Steam's P2P relay,
-    and the engine has Level= and LanHost= command line arguments. The binding constraint is
+    earlier one. The engine takes Level= and LanHost= command line arguments, imports WS2_32 and
+    carries a Demonware NAT port mapping client, so its own networking is where a transport
+    would come from. The legacy steam_api.dll in the game cannot provide one, because the
+    legacy API only creates the interfaces the application asks for and this game only asks
+    for user, friends, utils, apps and stats, so calling anything on the networking interface
+    faults. The binding constraint is
     simulation scope, not networking - pedestrians, props, vehicles, time dilation, screen shake
     and enemy targeting all have to be decided by one machine. From-zero research, tooling and
     design in games/prototype-2.
